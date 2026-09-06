@@ -161,9 +161,12 @@ body {
   .workspace { grid-template-columns: 1fr; }
 }
 
-.input-panel {
-  position: sticky;
-  top: 24px;
+/* 仅在双列布局（PC 端）时输入区 sticky 固定；手机端单列时不固定，避免遮挡下方结果 */
+@media (min-width: 901px) {
+  .input-panel {
+    position: sticky;
+    top: 24px;
+  }
 }
 
 .panel {
