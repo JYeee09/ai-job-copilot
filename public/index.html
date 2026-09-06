@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Job Copilot — 简历 × JD 匹配评估</title>
+<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- 顶部导航 -->
+  <header class="nav">
+    <div class="nav-inner">
+      <div class="wordmark">AI Job Copilot<span class="wordmark-dot">.</span></div>
+      <div class="nav-right">
+        <span id="status-pill" class="status-pill" data-state="checking">检测中…</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-copy">
+      <p class="eyebrow">Resume × Job Description</p>
+      <h1 class="hero-title">一份简历，<br>匹配一整个岗位。</h1>
+      <p class="hero-desc">粘贴 JD、上传简历，AI 逐项评估能力匹配度、定位差距，并给出针对这份岗位的简历调整策略。</p>
+    </div>
+    <div class="hero-sphere" aria-hidden="true">
+      <div class="sphere"></div>
+    </div>
+  </section>
+
+  <!-- 工作区 -->
+  <main class="workspace">
+
+    <!-- 左侧：输入 -->
+    <section class="panel input-panel">
+      <h2 class="panel-title">评估输入</h2>
+
+      <label class="field">
+        <span class="field-label">岗位名称 <span class="req">*</span></span>
+        <input id="job-title" class="input" type="text" placeholder="例如：产品经理" autocomplete="off">
+      </label>
+
+      <label class="field">
+        <span class="field-label">职位描述 JD <span class="req">*</span></span>
+        <textarea id="jd-text" class="textarea" rows="10" placeholder="粘贴完整的职位描述…"></textarea>
+      </label>
+
+      <div class="field">
+        <span class="field-label">简历文件 <span class="req">*</span></span>
+        <div id="dropzone" class="dropzone" tabindex="0">
+          <div class="dropzone-icon" aria-hidden="true">↥</div>
+          <div class="dropzone-text">拖拽简历到这里，或 <span class="dz-link">点击选择文件</span></div>
+          <div class="dropzone-hint">支持 PDF · Word · TXT · 图片，≤ 15MB</div>
+          <input id="resume-file" type="file" accept=".pdf,.doc,.docx,.txt,.md,.png,.jpg,.jpeg,.webp,.gif" hidden>
+        </div>
+        <div id="file-chip" class="file-chip" hidden>
+          <span id="file-name" class="file-name"></span>
+          <button id="file-remove" class="file-remove" aria-label="移除文件">✕</button>
+        </div>
+      </div>
+
+      <button id="run-btn" class="btn btn-primary" disabled>
+        <span class="btn-label">开始评估</span>
+      </button>
+      <p class="run-hint">评估结果仅供参考，建议结合人工判断</p>
+    </section>
+
+    <!-- 右侧：结果 -->
+    <section class="panel result-panel">
+      <div id="empty-state" class="empty-state">
+        <div class="empty-rule" aria-hidden="true"></div>
+        <p class="empty-title">评估结果会出现在这里</p>
+        <p class="empty-desc">填写左侧信息并开始评估后，将展示匹配分数、能力明细与简历策略。</p>
+      </div>
+
+      <div id="result" class="result" hidden>
+
+        <div class="result-head">
+          <div>
+            <p class="eyebrow">Overall Match</p>
+            <div class="score-row">
+              <span id="r-score" class="score-number">0</span>
+              <span class="score-unit">/ 100</span>
+            </div>
+            <p id="r-jobtitle" class="score-job"></p>
+          </div>
+          <div class="score-side">
+            <span id="r-fitlevel" class="fit-pill">—</span>
+            <div id="r-summary" class="summary-row"></div>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <h3 class="section-title">能力匹配明细</h3>
+          <div id="r-matches" class="match-list"></div>
+        </div>
+
+        <div class="split">
+          <div class="section-block">
+            <h3 class="section-title">最有力的匹配</h3>
+            <div id="r-strongest" class="card-list"></div>
+          </div>
+          <div class="section-block">
+            <h3 class="section-title">关键差距</h3>
+            <div id="r-gaps" class="card-list"></div>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <h3 class="section-title">简历调整策略</h3>
+          <ul id="r-strategy" class="strategy-list"></ul>
+        </div>
+
+        <div class="section-block">
+          <h3 class="section-title">申请建议</h3>
+          <p id="r-advice" class="advice-text"></p>
+        </div>
+
+        <p id="mock-flag" class="mock-flag" hidden>以上为演示数据，配置 Dify API 后即可评估真实简历。</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="footer-inner">
+      <span class="footer-brand">AI Job Copilot</span>
+      <span class="footer-note">AI Job Copilot · 让每一份简历都有针对性</span>
+    </div>
+  </footer>
+
+<script src="app.js"></script>
+</body>
+</html>
