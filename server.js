@@ -11,6 +11,12 @@
  *  - DIFY_API_KEY    Dify 应用的 API Key（在 Dify 应用「API 访问」页生成）
  *  - DIFY_MOCK       true 时启用演示模式（返回示例数据，便于无 Key 预览界面）
  *  - PORT            监听端口，默认 8787
+ *
+ * 「岗位推荐」子页面（飞书多维表格读取）：
+ *  - FEISHU_APP_ID      飞书开放平台自建应用 App ID（cli_ 开头）
+ *  - FEISHU_APP_SECRET  飞书开放平台自建应用 App Secret
+ *  - FEISHU_BASE_TOKEN  秋招岗位库 Base token（应用需为表格协作者）
+ *  - FEISHU_TABLE_ID    岗位记录表 Table ID
  */
 require('dotenv').config();
 
@@ -25,6 +31,12 @@ const FILE_VARIABLE = process.env.DIFY_FILE_VARIABLE || 'resume'; // 工作流�
 // Dify 文件按 user 隔离：上传文件与运行工作流必须用同一个 user，否则报 Invalid upload file
 const USER_ID = process.env.DIFY_USER || 'job-copilot-web';
 const MOCK = String(process.env.DIFY_MOCK || '').toLowerCase() === 'true';
+
+// 飞书多维表格「秋招岗位库」读取配置（岗位推荐子页面）
+const FEISHU_APP_ID = process.env.FEISHU_APP_ID || '';
+const FEISHU_APP_SECRET = process.env.FEISHU_APP_SECRET || '';
+const FEISHU_BASE_TOKEN = process.env.FEISHU_BASE_TOKEN || '';
+const FEISHU_TABLE_ID = process.env.FEISHU_TABLE_ID || '';
 
 // 允许上传的简历文件类型
 const ALLOWED_EXT = new Set([
@@ -267,7 +279,116 @@ function mockResult(jobTitle) {
   };
 }
 
-// ---------- API ----------
+// ---------- 飞书多维表格读取（岗位推荐子页面） ----------
+
+const FEISHU_OPEN_API = 'https://open.feishu.cn/open-apis';
+// tenant_access_token 缓存（有效期 2 小时，提前 5 分钟过期刷新）
+let feishuTokenCache = { token: '', expiresAt: 0 };
+
+function feishuConfigured() {
+  return Boolean(FEISHU_APP_ID && FEISHU_APP_SECRET && FEISHU_BASE_TOKEN && FEISHU_TABLE_ID);
+}
+
+/** 获取 tenant_access_token（带缓存） */
+async function getFeishuToken() {
+  const now = Date.now();
+  if (feishuTokenCache.token && feishuTokenCache.expiresAt > now + 5 * 60 * 1000) {
+    return feishuTokenCache.token;
+  }
+  const resp = await fetchWithTimeout(`${FEISHU_OPEN_API}/auth/v3/tenant_access_token/internal`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ app_id: FEISHU_APP_ID, app_secret: FEISHU_APP_SECRET }),
+  }, 15000);
+  const text = await resp.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch (_) { /* ignore */ }
+  if (!resp.ok || !json || json.code !== 0 || !json.tenant_access_token) {
+    const detail = json && (json.msg || json.message) ? (json.msg || json.message) : `HTTP ${resp.status}`;
+    throw new Error(`飞书鉴权失败：${detail}`);
+  }
+  feishuTokenCache = {
+    token: json.tenant_access_token,
+    expiresAt: now + (Number(json.expire || 7200) - 60) * 1000,
+  };
+  return feishuTokenCache.token;
+}
+
+/**
+ * 分页读取秋招岗位库全部记录，返回标准化岗位数组。
+ * 字段映射（表字段 → 前端字段）与 skill 写入时保持一致。
+ */
+async function fetchFeishuJobs() {
+  const token = await getFeishuToken();
+  const jobs = [];
+  let pageToken = '';
+  do {
+    const url = `${FEISHU_OPEN_API}/bitable/v1/apps/${encodeURIComponent(FEISHU_BASE_TOKEN)}/tables/${encodeURIComponent(FEISHU_TABLE_ID)}/records?page_size=100${pageToken ? `&page_token=${encodeURIComponent(pageToken)}` : ''}`;
+    const resp = await fetchWithTimeout(url, {
+      headers: { Authorization: `Bearer ${token}` },
+    }, 30000);
+    const text = await resp.text();
+    let json = null;
+    try { json = JSON.parse(text); } catch (_) { /* ignore */ }
+    if (!resp.ok || !json || json.code !== 0) {
+      const detail = json && (json.msg || json.message) ? (json.msg || json.message) : `HTTP ${resp.status}`;
+      throw new Error(`读取飞书岗位库失败：${detail}`);
+    }
+    const data = json.data || {};
+    for (const item of (data.items || [])) {
+      const f = item.fields || {};
+      jobs.push(normalizeFeishuJob(item.record_id, f));
+    }
+    pageToken = data.has_more ? (data.page_token || '') : '';
+  } while (pageToken);
+  return jobs;
+}
+
+/** 兼容 url 类型字段的两种返回形态：{text,link} 对象 或 字符串（可能带 markdown 链接） */
+function extractLink(value) {
+  if (!value) return '';
+  if (typeof value === 'object') {
+    if (value.link) return String(value.link);
+    if (Array.isArray(value)) return value.map(extractLink).filter(Boolean).join(' ');
+    return '';
+  }
+  const s = String(value);
+  const m = s.match(/\[[^\]]*\]\(([^)]+)\)/);
+  return m ? m[1] : s;
+}
+
+function textOf(v) {
+  if (v === null || v === undefined) return '';
+  if (Array.isArray(v)) return v.map(textOf).filter(Boolean).join('、');
+  if (typeof v === 'object') {
+    if (v.text) return String(v.text);
+    if (v.link) return String(v.link);
+    return '';
+  }
+  return String(v);
+}
+
+function normalizeFeishuJob(recordId, f) {
+  return {
+    id: recordId,
+    company: textOf(f['公司']),
+    position: textOf(f['岗位']),
+    date: textOf(f['日期']),
+    group: textOf(f['分组']),
+    resumeType: textOf(f['适合简历']),
+    location: textOf(f['地点']),
+    meta: textOf(f['行业薪资']),
+    winLevel: textOf(f['胜算等级']),
+    winReason: textOf(f['胜算理由']),
+    description: textOf(f['岗位描述']),
+    link: extractLink(f['投递链接']),
+    linkNote: textOf(f['链接指引']),
+    priority: textOf(f['梯队']),
+    strategy: textOf(f['策略']),
+    competitiveness: textOf(f['竞争力']),
+  };
+}
+
 
 /** 健康检查：不返回任何 Key 信息 */
 app.get('/api/health', (_req, res) => {
@@ -276,6 +397,30 @@ app.get('/api/health', (_req, res) => {
     configured: isConfigured(),
     mock: MOCK,
   });
+});
+
+/** 岗位推荐：从飞书多维表格「秋招岗位库」读取全部岗位 */
+app.get('/api/jobs', async (_req, res) => {
+  try {
+    if (!feishuConfigured()) {
+      return res.status(503).json({
+        ok: false,
+        error: '服务端未配置飞书岗位库（请管理员在 .env 中配置 FEISHU_APP_ID / FEISHU_APP_SECRET / FEISHU_BASE_TOKEN / FEISHU_TABLE_ID）',
+      });
+    }
+    const jobs = await fetchFeishuJobs();
+    // 按日期倒序（最新在前），同日期内按梯队优先级排序
+    const priorityRank = { '第一梯队': 1, '第二梯队': 2, '第三梯队': 3 };
+    jobs.sort((a, b) => {
+      if (a.date !== b.date) return String(b.date).localeCompare(String(a.date));
+      return (priorityRank[a.priority] || 9) - (priorityRank[b.priority] || 9);
+    });
+    const dates = [...new Set(jobs.map(j => j.date).filter(Boolean))];
+    res.json({ ok: true, jobs, dates, count: jobs.length });
+  } catch (err) {
+    console.error('[api/jobs] 失败:', err.message);
+    res.status(500).json({ ok: false, error: err.message || '读取岗位库失败' });
+  }
 });
 
 /** 运行评估 */

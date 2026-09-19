@@ -16,6 +16,15 @@
     emptyState: $('empty-state'),
     result: $('result'),
     mockFlag: $('mock-flag'),
+    tabs: document.querySelectorAll('.tab'),
+    viewEvaluate: $('view-evaluate'),
+    viewJobs: $('view-jobs'),
+    jobsLoading: $('jobs-loading'),
+    jobsError: $('jobs-error'),
+    jobsEmpty: $('jobs-empty'),
+    jobsContent: $('jobs-content'),
+    jobsMeta: $('jobs-meta'),
+    jobsGroups: $('jobs-groups'),
   };
 
   var toast = $('toast');
@@ -48,6 +57,120 @@
   function setStatus(state, label) {
     els.statusPill.dataset.state = state;
     els.statusPill.textContent = label;
+  }
+
+  // ---------- Tab 切换 ----------
+  els.tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      els.tabs.forEach(function (t) {
+        var active = t === tab;
+        t.classList.toggle('is-active', active);
+        t.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      var view = tab.dataset.view;
+      els.viewEvaluate.hidden = view !== 'evaluate';
+      els.viewJobs.hidden = view !== 'jobs';
+      if (view === 'jobs' && !jobsLoaded) loadJobs();
+    });
+  });
+
+  // ---------- 岗位推荐（飞书岗位库） ----------
+  var jobsLoaded = false;
+  var FIT_LEVEL_CLASS = {
+    '最高匹配度': 'lv-strong',
+    '高胜算': 'lv-high',
+    '较高胜算': 'lv-mid',
+    '中等偏上': 'lv-mid2',
+    '护城河岗位': 'lv-niche',
+  };
+  var TIER_LABEL = { '第一梯队': 'first', '第二梯队': 'second', '第三梯队': 'third' };
+
+  function loadJobs() {
+    jobsLoaded = true;
+    els.jobsLoading.hidden = false;
+    els.jobsError.hidden = true;
+    els.jobsEmpty.hidden = true;
+    els.jobsContent.hidden = true;
+
+    fetch('/api/jobs')
+      .then(function (r) {
+        return r.json().then(function (j) { return { status: r.status, body: j }; });
+      })
+      .then(function (res) {
+        els.jobsLoading.hidden = true;
+        if (!res.body.ok) throw new Error(res.body.error || '读取岗位失败');
+        var jobs = res.body.jobs || [];
+        if (!jobs.length) { els.jobsEmpty.hidden = false; return; }
+        renderJobs(res.body);
+      })
+      .catch(function (err) {
+        els.jobsLoading.hidden = true;
+        els.jobsError.hidden = false;
+        els.jobsError.textContent = err.message || '读取岗位失败，请稍后重试';
+      });
+  }
+
+  function renderJobs(data) {
+    var jobs = data.jobs || [];
+    els.jobsContent.hidden = false;
+
+    // 策略 + 竞争力（取最新日期第一条记录上的策略/竞争力）
+    var first = jobs[0] || {};
+    if (first.strategy || first.competitiveness) {
+      var metaHtml = '';
+      if (first.strategy) metaHtml += '<p class="jobs-strategy"><span class="meta-key">今日策略</span>' + esc(first.strategy) + '</p>';
+      if (first.competitiveness) metaHtml += '<p class="jobs-competitiveness"><span class="meta-key">竞争力</span>' + esc(first.competitiveness) + '</p>';
+      els.jobsMeta.innerHTML = metaHtml;
+      els.jobsMeta.hidden = false;
+    } else {
+      els.jobsMeta.hidden = true;
+    }
+
+    // 按日期分组（后端已按日期倒序、梯队排序）
+    var byDate = {};
+    jobs.forEach(function (j) {
+      var d = j.date || '未标注日期';
+      (byDate[d] = byDate[d] || []).push(j);
+    });
+
+    var html = '';
+    Object.keys(byDate).forEach(function (date) {
+      var list = byDate[date];
+      html += '<section class="job-day">';
+      html += '<h3 class="day-title"><span class="day-dot" aria-hidden="true"></span>' + esc(date) + ' · ' + list.length + ' 个岗位</h3>';
+      html += '<div class="job-grid">';
+      list.forEach(function (j) { html += jobCard(j); });
+      html += '</div></section>';
+    });
+    els.jobsGroups.innerHTML = html;
+  }
+
+  function jobCard(j) {
+    var levelClass = FIT_LEVEL_CLASS[j.winLevel] || '';
+    var tierClass = TIER_LABEL[j.priority] || '';
+    var link = j.link ? '<a class="job-link" href="' + esc(j.link) + '" target="_blank" rel="noopener noreferrer">查看职位 ›</a>' : '';
+    return (
+      '<article class="job-card">' +
+        '<div class="jc-top">' +
+          '<span class="jc-company">' + esc(j.company) + '</span>' +
+          (j.priority ? '<span class="tier-tag ' + tierClass + '">' + esc(j.priority) + '</span>' : '') +
+        '</div>' +
+        '<h4 class="jc-position">' + esc(j.position) + '</h4>' +
+        '<div class="jc-meta">' +
+          (j.location ? '<span class="jc-chip">' + esc(j.location) + '</span>' : '') +
+          (j.meta ? '<span class="jc-chip">' + esc(j.meta) + '</span>' : '') +
+          (j.resumeType ? '<span class="jc-chip">' + esc(j.resumeType) + '</span>' : '') +
+        '</div>' +
+        '<div class="jc-tags">' +
+          (j.winLevel ? '<span class="level-tag ' + levelClass + '">' + esc(j.winLevel) + '</span>' : '') +
+          (j.group ? '<span class="jc-group">' + esc(j.group) + '</span>' : '') +
+        '</div>' +
+        (j.winReason ? '<p class="jc-reason">' + esc(j.winReason) + '</p>' : '') +
+        (j.description ? '<p class="jc-desc">' + esc(j.description) + '</p>' : '') +
+        (j.linkNote ? '<p class="jc-note">' + esc(j.linkNote) + '</p>' : '') +
+        '<div class="jc-foot">' + link + '</div>' +
+      '</article>'
+    );
   }
 
   // ---------- 文件选择 ----------

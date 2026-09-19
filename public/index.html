@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AI Job Copilot — 简历 × JD 匹配评估</title>
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
@@ -20,6 +20,17 @@
       </div>
     </div>
   </header>
+
+  <!-- Tab 导航 -->
+  <nav class="tabs" role="tablist" aria-label="功能切换">
+    <div class="tabs-inner">
+      <button id="tab-evaluate" class="tab is-active" role="tab" aria-selected="true" data-view="evaluate">简历评估</button>
+      <button id="tab-jobs" class="tab" role="tab" aria-selected="false" data-view="jobs">岗位推荐</button>
+    </div>
+  </nav>
+
+  <!-- 视图一：简历评估 -->
+  <div id="view-evaluate" class="view">
 
   <!-- Hero -->
   <section class="hero">
@@ -126,6 +137,38 @@
     </section>
   </main>
 
+  </div><!-- /view-evaluate -->
+
+  <!-- 视图二：岗位推荐 -->
+  <div id="view-jobs" class="view" hidden>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Daily Job Digest</p>
+        <h1 class="hero-title">今日岗位，<br>已为你筛好。</h1>
+        <p class="hero-desc">每日自动收集各行业校招岗位，结合你的背景评估胜算、标注梯队，并给出针对性的投递建议。</p>
+      </div>
+      <div class="hero-sphere" aria-hidden="true">
+        <div class="sphere"></div>
+      </div>
+    </section>
+
+    <main class="workspace jobs-workspace">
+      <div id="jobs-loading" class="jobs-state">正在读取岗位库…</div>
+      <div id="jobs-error" class="jobs-state" hidden></div>
+      <div id="jobs-empty" class="jobs-state" hidden>
+        <div class="empty-rule" aria-hidden="true"></div>
+        <p class="empty-title">暂无岗位数据</p>
+        <p class="empty-desc">每日定时任务会在早上生成今天的岗位清单，晚点再来看看吧。</p>
+      </div>
+      <div id="jobs-content" class="jobs-content" hidden>
+        <div id="jobs-meta" class="jobs-meta"></div>
+        <div id="jobs-groups"></div>
+      </div>
+    </main>
+
+  </div><!-- /view-jobs -->
+
   <footer class="footer">
     <div class="footer-inner">
       <span class="footer-brand">AI Job Copilot</span>
@@ -133,6 +176,8 @@
     </div>
   </footer>
 
-<script src="app.js?v=2"></script>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script src="app.js?v=3"></script>
 </body>
 </html>
